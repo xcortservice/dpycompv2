@@ -24,6 +24,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import sys
+from itertools import groupby
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -204,7 +205,7 @@ class ActionRow(Item[V]):
         return any(c.is_dispatchable() for c in self.children)
 
     def is_persistent(self) -> bool:
-        return self.is_dispatchable() and all(c.is_persistent() for c in self.children)
+        return all(c.is_persistent() for c in self.children)
 
     def _update_children_view(self, view: LayoutView) -> None:
         for child in self._children:
@@ -276,6 +277,9 @@ class ActionRow(Item[V]):
         if self._view and getattr(self._view, '__discord_ui_layout_view__', False):
             self._view._total_children += 1
 
+        if item.is_dispatchable() and self._parent and getattr(self._parent, '__discord_ui_container__', False):
+            self._parent._add_dispatchable(item)  # type: ignore
+
         return self
 
     def remove_item(self, item: Item[Any]) -> Self:
@@ -334,9 +338,15 @@ class ActionRow(Item[V]):
     def to_component_dict(self) -> Dict[str, Any]:
         components = []
 
-        key = lambda i: i._rendered_row or i._row or sys.maxsize
-        for child in sorted(self._children, key=key):
-            components.append(child.to_component_dict())
+        def key(item: Item) -> int:
+            if item._rendered_row is not None:
+                return item._rendered_row
+            if item._row is not None:
+                return item._row
+            return sys.maxsize
+
+        for _, cmps in groupby(self._children, key=key):
+            components.extend(c.to_component_dict() for c in cmps)
 
         base = {
             'type': self.type.value,

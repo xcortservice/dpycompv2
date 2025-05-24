@@ -24,6 +24,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import sys
+from itertools import groupby
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Literal, Optional, TypeVar, Union, ClassVar
 
 from .item import Item
@@ -117,7 +118,7 @@ class Section(Item[V]):
         return self.accessory.is_dispatchable()
 
     def is_persistent(self) -> bool:
-        return self.is_dispatchable() and self.accessory.is_persistent()
+        return self.accessory.is_persistent()
 
     def walk_children(self) -> Generator[Item[V], None, None]:
         """An iterator that recursively walks through all the children of this section.
@@ -236,16 +237,24 @@ class Section(Item[V]):
             id=component.id,
         )
 
+    def to_components(self) -> List[Dict[str, Any]]:
+        components = []
+
+        def key(item: Item) -> int:
+            if item._rendered_row is not None:
+                return item._rendered_row
+            if item._row is not None:
+                return item._row
+            return sys.maxsize
+
+        for _, comps in groupby(self._children, key=key):
+            components.extend(c.to_component_dict() for c in comps)
+        return components
+
     def to_component_dict(self) -> Dict[str, Any]:
         data = {
             'type': self.type.value,
-            'components': [
-                c.to_component_dict()
-                for c in sorted(
-                    self._children,
-                    key=lambda i: i._rendered_row or sys.maxsize,
-                )
-            ],
+            'components': self.to_components(),
             'accessory': self.accessory.to_component_dict(),
         }
         if self.id is not None:

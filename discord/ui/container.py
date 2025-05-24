@@ -47,11 +47,11 @@ from .view import _component_to_item, LayoutView
 from .dynamic import DynamicItem
 from ..enums import ComponentType
 from ..utils import MISSING, get as _utils_get
+from ..colour import Colour, Color
 
 if TYPE_CHECKING:
     from typing_extensions import Self
 
-    from ..colour import Colour, Color
     from ..components import Container as ContainerComponent
     from ..interactions import Interaction
 
@@ -81,9 +81,6 @@ class Container(Item[V]):
 
     This can be inherited.
 
-    .. note::
-
-        Containers can contain up to 10 top-level components.
 
     .. versionadded:: 2.6
 
@@ -106,7 +103,7 @@ class Container(Item[V]):
 
         # or use it directly on LayoutView
         class MyView(ui.LayoutView):
-            container = ui.Container([ui.TextDisplay('I am a text display on a container!')])
+            container = ui.Container(ui.TextDisplay('I am a text display on a container!'))
             # or you can use your subclass:
             # container = MyContainer()
 
@@ -154,10 +151,19 @@ class Container(Item[V]):
                 self.add_item(child)
 
         self.spoiler: bool = spoiler
-        self._colour = accent_colour or accent_color
+        self._colour = accent_colour if accent_colour is not None else accent_color
 
         self.row = row
         self.id = id
+
+    def _add_dispatchable(self, item: Item[Any]) -> None:
+        self.__dispatchable.append(item)
+
+    def _remove_dispatchable(self, item: Item[Any]) -> None:
+        try:
+            self.__dispatchable.remove(item)
+        except ValueError:
+            pass
 
     def _init_children(self) -> List[Item[Any]]:
         children = []
@@ -165,25 +171,16 @@ class Container(Item[V]):
 
         for name, raw in self.__container_children_items__.items():
             if isinstance(raw, Item):
-                if getattr(raw, '__discord_ui_action_row__', False):
-                    item = copy.deepcopy(raw)
-                    # we need to deepcopy this object and set it later to prevent
-                    # errors reported on the bikeshedding post
-                    item._parent = self
-
+                item = copy.deepcopy(raw)
+                item._parent = self
+                if getattr(item, '__discord_ui_action_row__', False):
                     if item.is_dispatchable():
                         self.__dispatchable.extend(item._children)  # type: ignore
-                if getattr(raw, '__discord_ui_section__', False):
-                    item = copy.copy(raw)
+                if getattr(item, '__discord_ui_section__', False):
                     if item.accessory.is_dispatchable():  # type: ignore
-                        item.accessory = copy.deepcopy(item.accessory)  # type: ignore
                         if item.accessory._provided_custom_id is False:  # type: ignore
                             item.accessory.custom_id = os.urandom(16).hex()  # type: ignore
-                else:
-                    item = copy.copy(raw)
-
-                if getattr(item, '__discord_ui_section__', False) and item.accessory.is_dispatchable():  # type: ignore
-                    self.__dispatchable.append(item.accessory)  # type: ignore
+                        self.__dispatchable.append(item.accessory)  # type: ignore
 
                 setattr(self, name, item)
                 children.append(item)
@@ -212,7 +209,7 @@ class Container(Item[V]):
         return bool(self.__dispatchable)
 
     def is_persistent(self) -> bool:
-        return self.is_dispatchable() and all(c.is_persistent() for c in self.children)
+        return all(c.is_persistent() for c in self.children)
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -250,6 +247,9 @@ class Container(Item[V]):
 
     @accent_colour.setter
     def accent_colour(self, value: Optional[Union[Colour, int]]) -> None:
+        if not isinstance(value, (int, Colour)):
+            raise TypeError(f'expected an int, or Colour, not {value.__class__.__name__!r}')
+
         self._colour = value
 
     accent_color = accent_colour
@@ -268,9 +268,15 @@ class Container(Item[V]):
     def to_components(self) -> List[Dict[str, Any]]:
         components = []
 
-        key = lambda i: i._rendered_row or i._row or sys.maxsize
-        for child in sorted(self._children, key=key):
-            components.append(child.to_component_dict())
+        def key(item: Item) -> int:
+            if item._rendered_row is not None:
+                return item._rendered_row
+            if item._row is not None:
+                return item._row
+            return sys.maxsize
+
+        for i in sorted(self._children, key=key):
+            components.append(i.to_component_dict())
         return components
 
     def to_component_dict(self) -> Dict[str, Any]:
@@ -355,7 +361,7 @@ class Container(Item[V]):
         if item.is_dispatchable():
             if getattr(item, '__discord_ui_section__', False):
                 self.__dispatchable.append(item.accessory)  # type: ignore
-            elif hasattr(item, '_children'):
+            elif getattr(item, '__discord_ui_action_row__', False):
                 self.__dispatchable.extend([i for i in item._children if i.is_dispatchable()])  # type: ignore
             else:
                 self.__dispatchable.append(item)
@@ -391,6 +397,17 @@ class Container(Item[V]):
         except ValueError:
             pass
         else:
+            if item.is_dispatchable():
+                if getattr(item, '__discord_ui_section__', False):
+                    self._remove_dispatchable(item.accessory)  # type: ignore
+                elif getattr(item, '__discord_ui_action_row__', False):
+                    for c in item._children:  # type: ignore
+                        if not c.is_dispatchable():
+                            continue
+                        self._remove_dispatchable(c)
+                else:
+                    self._remove_dispatchable(item)
+
             if self._view and getattr(self._view, '__discord_ui_layout_view__', False):
                 if getattr(item, '__discord_ui_update_view__', False):
                     self._view._total_children -= len(tuple(item.walk_children()))  # type: ignore
@@ -428,4 +445,5 @@ class Container(Item[V]):
         if self._view and getattr(self._view, '__discord_ui_layout_view__', False):
             self._view._total_children -= sum(1 for _ in self.walk_children())
         self._children.clear()
+        self.__dispatchable.clear()
         return self
