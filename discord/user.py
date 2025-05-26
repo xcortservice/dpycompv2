@@ -72,6 +72,7 @@ class BaseUser(_UserTag):
         '_public_flags',
         '_state',
         '_avatar_decoration_data',
+        'clan_tag',
     )
 
     if TYPE_CHECKING:
@@ -128,6 +129,8 @@ class BaseUser(_UserTag):
         clan_data = data.get("primary_guild")
         if clan_data:
             self.clan_tag: Optional[ClanTag] = ClanTag(clan_data)
+        else:
+            self.clan_tag = None
             
     @classmethod
     def _copy(cls, user: Self) -> Self:
@@ -144,6 +147,7 @@ class BaseUser(_UserTag):
         self._state = user._state
         self._public_flags = user._public_flags
         self._avatar_decoration_data = user._avatar_decoration_data
+        self.clan_tag = user.clan_tag
 
         return self
 
