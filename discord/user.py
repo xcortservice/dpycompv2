@@ -32,6 +32,7 @@ from .colour import Colour
 from .enums import DefaultAvatar
 from .flags import PublicUserFlags
 from .utils import snowflake_time, _bytes_to_base64_data, MISSING, _get_as_snowflake
+from .clantag import ClanTag
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -86,6 +87,7 @@ class BaseUser(_UserTag):
         _accent_colour: Optional[int]
         _public_flags: int
         _avatar_decoration_data: Optional[AvatarDecorationData]
+        clan_tag: Optional[ClanTag]
 
     def __init__(self, *, state: ConnectionState, data: Union[UserPayload, PartialUserPayload]) -> None:
         self._state = state
@@ -123,7 +125,10 @@ class BaseUser(_UserTag):
         self.bot = data.get('bot', False)
         self.system = data.get('system', False)
         self._avatar_decoration_data = data.get('avatar_decoration_data')
-
+        clan_data = data.get("primary_guild")
+        if clan_data:
+            self.clan_tag: Optional[ClanTag] = ClanTag(clan_data)
+            
     @classmethod
     def _copy(cls, user: Self) -> Self:
         self = cls.__new__(cls)  # bypass __init__
