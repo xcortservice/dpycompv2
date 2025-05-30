@@ -24,7 +24,6 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import sys
-from itertools import groupby
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Literal, Optional, TypeVar, Union, ClassVar
 
 from .item import Item
@@ -67,6 +66,11 @@ class Section(Item[V]):
         The ID of this component. This must be unique across the view.
     """
 
+    __item_repr_attributes__ = (
+        'accessory',
+        'row',
+        'id',
+    )
     __discord_ui_section__: ClassVar[bool] = True
     __discord_ui_update_view__: ClassVar[bool] = True
 
@@ -93,6 +97,9 @@ class Section(Item[V]):
         self.accessory: Item[V] = accessory
         self.row = row
         self.id = id
+
+    def __repr__(self) -> str:
+        return f'<{super().__repr__()[:-1]} children={len(self._children)}'
 
     @property
     def type(self) -> Literal[ComponentType.section]:
@@ -195,7 +202,7 @@ class Section(Item[V]):
 
         return self
 
-    def get_item_by_id(self, id: int, /) -> Optional[Item[V]]:
+    def get_item(self, id: int, /) -> Optional[Item[V]]:
         """Gets an item with :attr:`Item.id` set as ``id``, or ``None`` if
         not found.
 
@@ -247,8 +254,8 @@ class Section(Item[V]):
                 return item._row
             return sys.maxsize
 
-        for _, comps in groupby(self._children, key=key):
-            components.extend(c.to_component_dict() for c in comps)
+        for component in sorted(self._children, key=key):
+            components.append(component.to_component_dict())
         return components
 
     def to_component_dict(self) -> Dict[str, Any]:

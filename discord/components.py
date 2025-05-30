@@ -42,7 +42,7 @@ from .enums import (
     TextStyle,
     ChannelType,
     SelectDefaultValueType,
-    SeparatorSize,
+    SeparatorSpacing,
     MediaItemLoadingState,
 )
 from .flags import AttachmentFlags
@@ -54,7 +54,6 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from .types.components import (
-        ComponentBase as ComponentBasePayload,
         Component as ComponentPayload,
         ButtonComponent as ButtonComponentPayload,
         SelectMenu as SelectMenuPayload,
@@ -160,7 +159,7 @@ class Component:
                 setattr(self, slot, value)
         return self
 
-    def to_dict(self) -> ComponentBasePayload:
+    def to_dict(self) -> ComponentPayload:
         raise NotImplementedError
 
 
@@ -905,7 +904,9 @@ class UnfurledMediaItem(AssetMixin):
     Parameters
     ----------
     url: :class:`str`
-        The URL of this media item.
+        The URL of this media item. This can be an arbitrary url or a reference to a local
+        file uploaded as an attachment within the message, which can be accessed with the
+        ``attachment://<filename>`` format.
 
     Attributes
     ----------
@@ -963,13 +964,16 @@ class UnfurledMediaItem(AssetMixin):
         return self
 
     def _update(self, data: UnfurledMediaItemPayload, state: Optional[ConnectionState]) -> None:
-        self.proxy_url = data['proxy_url']
+        self.proxy_url = data.get('proxy_url')
         self.height = data.get('height')
         self.width = data.get('width')
         self.content_type = data.get('content_type')
         self._flags = data.get('flags', 0)
         self.placeholder = data.get('placeholder')
-        self.loading_state = try_enum(MediaItemLoadingState, data['loading_state'])
+
+        loading_state = data.get('loading_state')
+        if loading_state is not None:
+            self.loading_state = try_enum(MediaItemLoadingState, loading_state)
         self._state = state
 
     def __repr__(self) -> str:
@@ -990,8 +994,8 @@ class MediaGalleryItem:
     ----------
     media: Union[:class:`str`, :class:`UnfurledMediaItem`]
         The media item data. This can be a string representing a local
-        file uploaded as an attachment in the message, that can be accessed
-        using the ``attachment://file-name.extension`` format.
+        file uploaded as an attachment in the message, which can be accessed
+        using the ``attachment://<filename>`` format, or an arbitrary url.
     description: Optional[:class:`str`]
         The description to show within this item. Up to 256 characters. Defaults
         to ``None``.
@@ -1154,7 +1158,7 @@ class SeparatorComponent(Component):
 
     Attributes
     ----------
-    spacing: :class:`SeparatorSize`
+    spacing: :class:`SeparatorSpacing`
         The spacing size of the separator.
     visible: :class:`bool`
         Whether this separator is visible and shows a divider.
@@ -1174,7 +1178,7 @@ class SeparatorComponent(Component):
         self,
         data: SeparatorComponentPayload,
     ) -> None:
-        self.spacing: SeparatorSize = try_enum(SeparatorSize, data.get('spacing', 1))
+        self.spacing: SeparatorSpacing = try_enum(SeparatorSpacing, data.get('spacing', 1))
         self.visible: bool = data.get('divider', True)
         self.id: Optional[int] = data.get('id')
 
